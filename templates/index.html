@@ -1,0 +1,36 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Home
+{% endblock %}
+
+{% block main %}
+
+    <div class="intro">
+        <h1>CHOUVIE</h1>
+        <h5><i>Choose Your Movie</i></h5>
+        <br>
+        <p>Chouvie helpt jou en je vrienden om snel, leuk en gemakkelijk een film te vinden om te kijken. Chouvie houdt niet alleen rekening met jullie persoonlijke voorkeuren, er wordt ook rekening gehouden met jullie beschikbare streamingsdiensten.
+            Zo kom je nooit films tegen die je toch niet kunt kijken.
+        </p>
+        <p>
+            Maak snel een groep aan of join een groep om jullie filmavond zo snel mogelijk van start te laten gaan!
+        </p>
+        <br>
+    </div>
+
+
+    <div class="choice">
+        <a href="/create">
+            <button type="submit" class="btn btn-dark btn-lg">CREATE A GROUP</button>
+        </a>
+    </div>
+    <p>or</p>
+    <div class="choice">
+        <a href="/join">
+            <button type="submit" class="btn btn-secondary btn-lg">JOIN A GROUP</button>
+        </a>
+    </div>
+
+
+{% endblock %}

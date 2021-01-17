@@ -1,0 +1,54 @@
+main .form-control
+{
+    /* center form controls */
+    display: inline-block;
+
+    /* override Bootstrap's 100% width for form controls */
+    width: auto;
+}
+
+main
+{
+    /* scroll horizontally as needed */
+    overflow-x: auto;
+
+    /* Center contents */
+    text-align: center;
+}
+
+main img
+{
+    /* constrain images on small screens */
+    max-width: 100%;
+}
+
+
+
+/*to be adjusted:*/
+.intro {
+    width: 100%;
+}
+
+body {
+    background-image: linear-gradient(to right, #9A0B05, #490603);
+    color: white;
+}
+
+.choice {
+    margin: 10px;
+}
+
+ul {
+    list-style-type: none;
+    padding-left: 0;
+}
+
+a {
+    text-decoration: none;
+    color: grey;
+}
+
+a:hover {
+    text-decoration:none;
+    color: white;
+}

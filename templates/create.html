@@ -1,0 +1,21 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Create
+{% endblock %}
+
+{% block main %}
+
+    <form action="/create" method="post">
+        <div class="form-group">
+            <input autocomplete="off" autofocus class="form-control" name="name" placeholder="Nickname" type="text">
+        </div>
+        <!--message-->
+        <!--avatar-->
+        <!--genres etc-->
+        <div class="form-group">
+            <button type="submit" class="btn btn-secondary btn-lg">START</button>
+        </div>
+    </form>
+
+{% endblock %}
