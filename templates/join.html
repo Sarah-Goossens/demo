@@ -1,0 +1,33 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Join
+{% endblock %}
+
+{% block main %}
+
+    <form action="/join" method="post">
+
+
+        {% if group %}
+            <div class="form-group">
+                <input autocomplete="off" class="form-control" name="{{ group }}" value="{{ group }}" type="text">
+            </div>
+        {% else %}
+            <div class="form-group">
+            <input autocomplete="off" autofocus class="form-control" name="group" placeholder="Group" type="text">
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+            <input autocomplete="off" autofocus class="form-control" name="name" placeholder="Nickname" type="text">
+        </div>
+        <!--message-->
+        <!--avatar-->
+        <!--genres etc-->
+        <div class="form-group">
+            <button type="submit" class="btn btn-secondary btn-lg">START</button>
+        </div>
+    </form>
+
+{% endblock %}

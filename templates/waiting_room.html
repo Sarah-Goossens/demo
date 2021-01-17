@@ -1,0 +1,57 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Waiting room
+{% endblock %}
+
+{% block main %}
+
+    <h1>Group: <b>{{ group }}</b></h1>
+    <p>Current group members: </p>
+    <ul>
+        <div id="response"></div>
+    </ul>
+
+    {% if is_owner == true %}
+        <div class="form-group">
+            <form action="/waiting-room" method="post">
+                <button type="submit" class="btn btn-secondary btn-lg">START</button>
+            </form>
+        </div>
+    {% else %}
+        <h3>We will soon start choosing!</h1>
+        <img src="/static/waiting.gif", alt="waiting">
+    {% endif %}
+
+
+    <script>
+
+        // function that fetches new members of group
+        function update(){
+            $.ajax({
+                url: "/members",
+                type: "GET",
+                dataType: "json",
+                success: function(resp){
+
+                    // add new data to response.html
+                    $('div#response').append(resp.data);
+
+                    // check if questioning should start
+                    if (resp.done == true) {
+                        return window.location.href = "/questions";
+                    };
+                }
+            });
+        }
+
+        // repeat update function every second
+        var interval = setInterval(update, 1000);
+
+        // call on update function when page loads
+        $(function() { update() });
+
+    </script>
+
+{% endblock %}
+

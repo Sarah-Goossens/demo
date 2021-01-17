@@ -1,13 +1,18 @@
 import os
 
 from cs50 import SQL
-from flask import Flask, flash, redirect, render_template, request, session
+from flask import Flask, flash, redirect, render_template, request, session, jsonify
 from flask_session import Session
 from tempfile import mkdtemp
 from werkzeug.exceptions import default_exceptions, HTTPException, InternalServerError
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from helpers import apology, login_required, lookup, usd
+from helpers import apology, login_required
+
+from datetime import date
+import random
+
+
 
 # Configure application
 app = Flask(__name__)
@@ -25,9 +30,6 @@ def after_request(response):
     return response
 
 
-# Custom filter
-app.jinja_env.filters["usd"] = usd
-
 # Configure session to use filesystem (instead of signed cookies)
 app.config["SESSION_FILE_DIR"] = mkdtemp()
 app.config["SESSION_PERMANENT"] = False
@@ -35,256 +37,269 @@ app.config["SESSION_TYPE"] = "filesystem"
 Session(app)
 
 # Configure CS50 Library to use SQLite database
-db = SQL("sqlite:///finance.db")
+db = SQL("sqlite:///chouvie.db")
 
 # Make sure API key is set
-if not os.environ.get("API_KEY"):
-    raise RuntimeError("API_KEY not set")
+# if not os.environ.get("API_KEY"):
+#     raise RuntimeError("API_KEY not set")
+
 
 
 @app.route("/")
-@login_required
 def index():
-    """Show portfolio of stocks"""
-
-    data_user = db.execute("SELECT * FROM users WHERE id = :id", id=session["user_id"])
-    cash = data_user[0]['cash']
-
-    total_list = []
-
-    data_buy = db.execute("SELECT * FROM portofolio WHERE id = :id", id=session["user_id"])
-    for stocks in data_buy:
-        stock = stocks['stock']
-        price = stocks['price']
-        share = stocks['share']
-        total_list.append(stocks['price'] * stocks['share'])
-    grand_total = cash + sum(total_list)
-    return render_template("index.html", data_buy=data_buy, cash=cash, grand_total=grand_total)
+    return render_template("index.html")
 
 
-@app.route("/buy", methods=["GET", "POST"])
-@login_required
-def buy():
-    """Buy shares of stock"""
+
+@app.route("/create", methods=["GET", "POST"])
+def create():
 
     if request.method == "POST":
 
-        # kijken of er een symbol is ingevuld
-        if not request.form.get('symbol'):
-            return apology('must provide symbol', 403)
+        # create group code
+        # TODO: nice group names (API)
+        group = random.randint(1, 100000)
 
-        # kijken of de symbol bestaat
-        if lookup(request.form.get('symbol')) == None:
-            return apology('invalid symbol', 400)
+        # create user
+        try:
+            db.execute("INSERT INTO users(name) VALUES (?);", request.form.get("name"))
+        except:
+            flash("Nickname already taken! Choose a different name")
+            return render_template("create.html")
 
-        # kijken of de shares amount is ingevuld
-        if not request.form.get("shares"):
-            return apology('must provide a number of shares', 403)
+        user_id = db.execute("SELECT id FROM users WHERE name=?;", request.form.get("name"))[0].get("id")
 
-        # kijken of de shares amount een positieve integer is
-        if not request.form.get("shares").isdigit():
-            return apology('invalid number of shares', 400)
+        # create group
+        taken = db.execute("SELECT id FROM groups WHERE name=?;", str(group))
+        while len(taken) != 0:
+            group = random.randint(1, 100000)
+            taken = db.execute("SELECT id FROM groups WHERE name=?;", str(group))
+        db.execute("INSERT INTO groups(name, owner, state, created) VALUES (?, ?, ?, ?);", str(group), user_id, "pending", date.today())
 
-        if int(request.form.get("shares")) < 1:
-            return apology('invalid number of shares', 400)
+        group_id = db.execute("SELECT id FROM groups WHERE name=?;", str(group))[0].get("id")
 
-        stock = request.form.get('symbol')
-        shares_amount = int(request.form.get("shares"))
+        db.execute("INSERT INTO group_members(group_id, user_id) VALUES (?, ?);", group_id, user_id) #dubbelop?
 
-        # data over de stock verzamelen en de cash verzamelen
-        stock_data = lookup(request.form.get('symbol'))
-        price = stock_data['price']
-        cash = db.execute("SELECT cash FROM users WHERE id = :id", id=session["user_id"])
-        kosten = price * shares_amount
+        # set session
+        session["user_id"] = user_id
+        session["group_id"] = group_id
+        session["members"] = []
 
-        # kijken of gebruiker het kan betalen
-        if (cash[0]['cash']) < kosten:
-            return apology('Not enough money', 403)
+        # send to waiting room
+        return redirect("/waiting-room")
 
-        # geld aftrekken en tabel updaten
-        new_cash = (cash[0]['cash']) - kosten
-        db.execute("UPDATE users SET cash = :cash WHERE id = :id", cash=new_cash, id=session["user_id"])
+    return render_template("create.html")
 
-        # gegevens toevoegen aan database: als de stock al eerder is gekocht wordt het geupdate, anders wordt er een nieuwe rij ingevoegd
-        data = db.execute("SELECT * FROM portofolio WHERE id = :id AND stock = :stock", id=session["user_id"], stock=stock)
-        if len(data) < 1:
-            db.execute("INSERT INTO portofolio (id, stock, share, price) VALUES (?,?,?,?)",
-                       session["user_id"], stock, shares_amount, price)
+
+
+@app.route("/join", methods=["GET", "POST"])
+def join():
+
+    if request.method == "POST":
+
+        # fetch group_id
+        group_id = db.execute("SELECT id FROM groups WHERE name=?;", request.form.get("group"))
+
+        if len(group_id) != 1:
+            flash("That's not a valid group name")
+            return render_template("join.html")
+            # return apology("Not a valid group name", 400)
+
         else:
-            db.execute("UPDATE portofolio SET share = share + :share, price = :price WHERE id = :id AND stock = :stock",
-                       share=shares_amount, price=price, id=session["user_id"], stock=stock)
+            group_id = group_id[0].get("id")
 
-        return redirect("/")
+        # create user
+        try:
+            db.execute("INSERT INTO users(name) VALUES (?);", request.form.get("name"))
+        except:
+            flash("Nickname already taken! Choose a different name")
+            return render_template("join.html", group=request.form.get("group"))
+
+        user_id = db.execute("SELECT id FROM users WHERE name=?;", request.form.get("name"))[0].get("id")
+
+        # link user to group
+        db.execute("INSERT INTO group_members(group_id, user_id) VALUES (?, ?);", group_id, user_id)
+
+        # set session
+        session["user_id"] = user_id
+        session["group_id"] = group_id
+        session["members"] = []
+
+        # send to waitingroom page
+        return redirect("/waiting-room")
 
     else:
-        return render_template("buy.html")
+
+        return render_template("join.html")
 
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    """Log user in"""
 
-    # Forget any user_id
-    session.clear()
-
-    # User reached route via POST (as by submitting a form via POST)
-    if request.method == "POST":
-
-        # Ensure username was submitted
-        if not request.form.get("username"):
-            return apology("must provide username", 403)
-
-        # Ensure password was submitted
-        elif not request.form.get("password"):
-            return apology("must provide password", 403)
-
-        # Query database for username
-        rows = db.execute("SELECT * FROM users WHERE username = ?", request.form.get("username"))
-
-        # Ensure username exists and password is correct
-        if len(rows) != 1 or not check_password_hash(rows[0]["hash"], request.form.get("password")):
-            return apology("invalid username and/or password", 403)
-
-        # Remember which user has logged in
-        session["user_id"] = rows[0]["id"]
-
-        # Redirect user to home page
-        return redirect("/")
-
-    # User reached route via GET (as by clicking a link or via redirect)
-    else:
-        return render_template("login.html")
-
-
-@app.route("/logout")
-def logout():
-    """Log user out"""
-
-    # Forget any user_id
-    session.clear()
-
-    # Redirect user to login form
-    return redirect("/")
-
-
-@app.route("/quote", methods=["GET", "POST"])
+# TODO: optimaliseren en checken
+@app.route("/members")
 @login_required
-def quote():
-    """Get stock quote."""
+def members():
+
+    # get current groupmembers from database and session
+    members = getMembers(session["group_id"])
+    current = session["members"]
+
+    # fill add with members that are stored in the database but not yet in the user's session
+    add = [member for member in members if member not in current]
+
+    # update mebers in user's session
+    session["members"] = members
+
+    # check current groupstate
+    state = db.execute("SELECT state FROM groups WHERE id=?;", session["group_id"])[0].get("state")
+
+    if state == "questioning":
+        done = True
+
+    else: done = False
+
+    # render response and return data
+    return jsonify({'data': render_template('response.html', members=add), 'done' : done})
+
+
+
+
+@app.route("/waiting-room", methods=["GET", "POST"])
+@login_required
+def waiting_room():
 
     if request.method == "POST":
-        quote = lookup(request.form.get('symbol'))
 
-        # als de quote niet gevonden kan worden
-        if quote == None:
-            return apology("invalid symbol", 400)
+        # update group state to questioning
+        db.execute("UPDATE groups SET state=? WHERE id=?;", "questioning", session["group_id"])
 
-        return render_template("quoted.html", quote=quote)
+        return render_template("questions.html")
 
     else:
-        return render_template("quote.html")
+
+        # fetch group name, state and members
+        row = db.execute("SELECT name, state FROM groups WHERE id = ?;", session["group_id"])
+        group = row[0].get("name")
+        members = getMembers(session["group_id"])
+
+        is_owner = False
+
+        # check if user is group owner
+        owner = db.execute("SELECT * FROM groups WHERE owner=?;", session["user_id"])
+        if len(owner) == 1:
+            is_owner = True
+
+        # redirect to questioning if state is not pending
+        if row[0].get("state") != "pending":
+            return render_template("questions.html")
+
+        return render_template("waiting_room.html", group=group, is_owner=is_owner)
 
 
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    """Register user"""
+@app.route("/questions", methods=["GET", "POST"])
+@login_required
+def questions():
 
-    # Forget any user_id
+    if request.method == "POST":
+
+        # TODO: Lune
+
+        return render_template("top_three.html")
+
+    else:
+        return render_template("questions.html")
+
+
+
+@app.route("/top_three", methods=["GET", "POST"])
+@login_required
+def top_three():
+
+    if request.method == "POST":
+
+        # TODO: Martijn
+
+        return redirect("/result")
+        # or: return render_template("result.html")
+
+    else:
+
+        return render_template("top_three.html")
+
+
+
+@app.route("/result")
+@login_required
+def result():
+
+    # TODO: Martijn
+
+    # somewhere at the end call on funciton done() - maybe 1hr after final result is given
+
+    return render_template("result.html")
+
+
+
+@app.route("/solo", methods=["GET", "POST"])
+def solo():
+
+    if request.method == "POST":
+
+        # TODO: Yenly
+
+        return redirect("/solo")
+        # or: return render_template("solo.html")
+
+    else:
+
+        return render_template("solo.html")
+
+
+
+@app.route("/netflix-and-chill", methods=["GET", "POST"])
+def netflix_and_chill():
+
+    if request.method == "POST":
+
+        # TODO: Sabine
+
+        return redirect("/netflix-and-chill")
+        # or: return render_template("netflix_and_chill.html")
+
+    else:
+
+        return render_template("netflix_and_chill.html")
+
+
+
+
+#######################################################################################################################
+
+# fetch group members
+def getMembers(group_id):
+    names = db.execute("SELECT name FROM users WHERE id in (SELECT user_id FROM group_members WHERE group_id=?);", group_id)
+    members = []
+
+    for name in names:
+        print("name: ", name.get("name"))
+        members.append(name.get("name"))
+
+    return members
+
+
+
+# delete user (and group)
+def done():
+    db.execute("DELETE FROM group_members WHERE user_id=?;", session["user_id"])
+    db.execute("DELETE FROM users WHERE id=?;", session["user_id"])
+    owner = db.execute("SELECT * FROM groups WHERE owner=?;", session["user_id"])
+
+    if owner[0] == 1:
+        db.execute("DELETE FROM groups WHERE id=?;", session["group_id"])
+
     session.clear()
 
-    if request.method == "POST":
 
-        # Ensure username was submitted
-        if not request.form.get("username"):
-            return apology("must provide username", 400)
-
-        # Ensure password was submitted
-        elif not request.form.get("password"):
-            return apology("must provide password", 400)
-
-        # Ensure password was submitted
-        elif not request.form.get("confirmation"):
-            return apology("must provide password confirmation", 400)
-
-        # Ensure password and password confirmed match
-        elif request.form.get("password") != request.form.get("confirmation"):
-            return apology("passwords didn't match", 400)
-
-        # Query database for username
-        rows = db.execute("SELECT * FROM users WHERE username = ?", request.form.get("username"))
-
-        if len(rows) != 0:
-            return apology("username taken", 400)
-
-        password = generate_password_hash(request.form.get("password"))
-        session["user_id"] = db.execute("INSERT INTO users (username, hash) VALUES (?, ?)", request.form.get("username"), password)
-
-        # Redirect user to home page
-        return redirect("/")
-
-    else:
-        return render_template("register.html")
-
-
-@app.route("/sell", methods=["GET", "POST"])
-@login_required
-def sell():
-    """Sell shares of stock"""
-    if request.method == "POST":
-
-        # kijken of een symbool is ingevuld
-        if not lookup(request.form.get('symbol')):
-            return apology('invalid symbol', 400)
-
-        # kijken of de shares amount is ingevuld
-        if not request.form.get("shares"):
-            return apology('must provide a number of shares', 400)
-
-        # kijken of de shares amount een positieve integer is
-        if not request.form.get("shares").isdigit():
-            return apology('invalid number of shares', 400)
-
-        if int(request.form.get("shares")) < 1:
-            return apology('invalid number of shares', 400)
-
-        # Query database for stock
-        portofolio_data = db.execute("SELECT * FROM portofolio WHERE id = :id AND stock = :stock",
-                                     id=session["user_id"], stock=request.form.get("symbol"))
-
-        # Ensure user has stock
-        if len(portofolio_data) < 1:
-            return apology("invalid stock", 403)
-
-        shares = int(request.form.get("shares"))
-        stock = request.form.get("symbol")
-
-        # hoeveelheid shares na de verkoop
-        new_shares = (portofolio_data[0]['share']) - shares
-
-        # kijken of genoeg shares heeft om te verkopen
-        if new_shares < 0:
-            return apology('not enough shares to sell', 400)
-        elif new_shares == 0:
-            db.execute("DELETE FROM portofolio WHERE id=:id AND stock=:stock", id=session["user_id"], stock=stock)
-        elif new_shares > 0:
-            db.execute("UPDATE portofolio SET share=:shares WHERE id=:id AND stock=:stock",
-                       shares=new_shares, id=session["user_id"], stock=stock)
-
-        # cash aanpassen
-        stock_data = lookup(request.form.get('symbol'))
-        opbrengst = shares * stock_data['price']
-        db.execute("UPDATE users SET cash= cash + :opbrengst WHERE id=:id", opbrengst=opbrengst, id=session["user_id"])
-        return redirect("/")
-
-    else:
-        stocksset = set()
-        portofolio = db.execute("SELECT stock FROM portofolio WHERE id=:id", id=session["user_id"])
-        for stock in portofolio:
-            stocksset.add(stock['stock'])
-        stocks = list(stocksset)
-        return render_template("sell.html", stocks=stocks)
-
-
+# TEMPORARY: handle errors
 def errorhandler(e):
     """Handle error"""
     if not isinstance(e, HTTPException):
@@ -292,8 +307,6 @@ def errorhandler(e):
     return apology(e.name, e.code)
 
 
-# Listen for errors
+# listen for errors
 for code in default_exceptions:
     app.errorhandler(code)(errorhandler)
-
-
